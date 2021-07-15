@@ -25,6 +25,8 @@
 
 """8080 machine code interpreter."""
 
+import re
+
 
 class Virtual8080:
 
@@ -334,6 +336,30 @@ class Virtual8080:
         for c in data:
             self.memory[i] = c
             i += 1
+    
+    def load_hex(self, hex_str):
+        hex_re = re.compile(
+            r'^:(?P<length>[0-9a-f]{2})(?P<address>[0-9a-f]{4})(?P<type>[0-9a-f]{2})(?P<data>[0-9a-f]*?)(?P<checksum>[0-9a-f]{2})$',
+            flags=re.IGNORECASE
+        )
+        for hex_line in hex_str.splitlines():
+            match = hex_re.fullmatch(hex_line)
+            if match is None:
+                continue
+
+            length = int(match.group('length'), 16)
+            address = int(match.group('address'), 16)
+            rec_type = int(match.group('type'), 16)
+            data = match.group('data')
+            data_bytes = [int(data[i:i+2], 16) for i in range(0, length * 2, 2)]
+            if len(data_bytes) != length:
+                raise ValueError
+
+            if rec_type == 0:
+                self.memory[address:address+length] = data_bytes
+            elif rec_type == 1:
+                return
+
     
     def get_mem(self, addr):
         return self.memory[addr] if addr < self.max_memory else 0
@@ -855,7 +881,7 @@ class Virtual8080:
             result = (self.registers[reg] - 1) % 256
             self.set_flag_sign(result >> 7)
             self.set_flag_zero(1 if result == 0 else 0)
-            self.set_flag_auxcarry(1 if (self.registers[reg] & 0x0f) != 0 else 0)
+            self.set_flag_auxcarry(1 if self.registers[reg] & 0x0f > 0 else 0)
             self.set_flag_parity(parity(result))
             self.registers[reg] = result
         return fn
@@ -866,7 +892,7 @@ class Virtual8080:
             result = (self.get_mem(addr) - 1) % 256
             self.set_flag_sign(result >> 7)
             self.set_flag_zero(1 if result == 0 else 0)
-            self.set_flag_auxcarry(1 if (self.get_mem(addr) & 0x0f) == 0 else 0)
+            self.set_flag_auxcarry(1 if self.get_mem(addr) & 0x0f > 0 else 0)
             self.set_flag_parity(parity(result))
             self.set_mem(addr, result)
         return fn
@@ -917,23 +943,28 @@ class Virtual8080:
     def instr_daa(self):
         def fn():
             acc = self.registers['a']
+            carry = self.get_flag_carry()
+            aux_carry = self.get_flag_auxcarry()
 
-            old_lsn = acc & 0x0f
-            if old_lsn > 9 or self.get_flag_auxcarry():
+            low_nibble = acc & 0x0f
+            if aux_carry == 1 or low_nibble > 9:
                 acc += 6
-            new_lsn = acc & 0x0f
+                aux_carry = 1 if low_nibble > 9 else 0
+            
+            high_nibble = acc >> 4
+            if carry == 1 or high_nibble > 9:
+                acc += 0x60
+                if carry != 1:
+                    carry = 1 if high_nibble > 9 else 0
 
-            msn = (acc & 0xf0) >> 4
-            if msn > 9 or self.get_flag_carry():
-                msn += 6
-            acc = ((msn & 0x0f) << 4) | new_lsn
+            acc = acc & 0xff
 
             self.registers['a'] = acc
             self.set_flag_sign(acc >> 7)
             self.set_flag_zero(1 if acc == 0 else 0)
-            self.set_flag_auxcarry(1 if new_lsn < old_lsn else 0)
+            self.set_flag_auxcarry(aux_carry)
             self.set_flag_parity(parity(acc))
-            self.set_flag_carry(1 if msn > 0xf else 0)
+            self.set_flag_carry(carry)
         return fn
 
     ##

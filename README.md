@@ -1,6 +1,7 @@
 # 8080 Emulator in Python
 
-An Intel 8080 emulator written in Python. It runs Altair BASIC and CP/M!
+An Intel 8080 emulator written in Python. It runs Altair BASIC and CP/M! It
+even passes 8080EXER!
 
 ## Screenshots
 
@@ -9,6 +10,9 @@ Wordstar on CP/M on my 8080 emulator on Python on Windows:
 
 Hunt the Wumpus on Altair 8K BASIC on my 8080 emulator on Python on Windows:
 ![Hunt the Wumpus on Altair BASIC on my 8080 emulator on Python on Windows](wumpus.png)
+
+Passing 8080 instruction exerciser tests:
+![Passing 8080 instruction exerciser tests](8080exer.png)
 
 ## Running Altair BASIC
 
@@ -51,6 +55,14 @@ disks with CP/M 2.2 directory data, such as an image created using
 [cpmtools][3]' default format, `ibm-3740`.
 
 [3]: http://www.moria.de/~michael/cpmtools/
+
+## 8080 instruction exerciser
+
+To run 8080EX1 without CP/M, run `8080exer.py`:
+
+```
+python 8080exer.py
+```
 
 ## Resources
 

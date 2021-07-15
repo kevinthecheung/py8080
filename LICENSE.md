@@ -44,3 +44,16 @@ the [SIL Open Font License][4].
 
 [3]: http://terminus-font.sourceforge.net/
 [4]: http://scripts.sil.org/OFL
+
+## 8080/8085 CPU Exerciser
+
+```
+8080EX1.HEX
+```
+
+The [8080/8085 CPU Exerciser][5], redistributed here without modification, is
+copyright Frank Cringle and Ian Bartholomew, and used under the terms of the
+[GNU General Public License, version 2][6].
+
+[5]: https://web.archive.org/web/20151108135453/http://www.idb.me.uk:80/sunhillow/8080.html
+[6]: https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
