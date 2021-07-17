@@ -262,36 +262,36 @@ class CPM_TTY:
         vm = Virtual8080()
         vm.io = CPM_Machine(vm, self.disk_images)
 
+        work_ms = 1000 // 60    # Allow ~17ms of emulation time to maintain ~60fps.
         vm.halted = False
-        tick = 0
         while not vm.halted:
-            vm.step()
-            tick = (tick + 1) % 50000
+            work_until = pygame.time.get_ticks() + work_ms
+            while pygame.time.get_ticks() < work_until:
+                if not vm.halted:
+                    vm.step()
+                ch = vm.io.output_char
+                if ch != -1:
+                    self.putch(ch)
+                    vm.io.output_char = -1
 
-            ch = vm.io.output_char
-            if ch != -1:
-                self.putch(ch)
-            vm.io.output_char = -1
+            for event in pygame.event.get():
+                if event.type == QUIT:
+                    vm.halted = True
+                
+                if event.type == KEYDOWN:
+                    if 0 <= event.key <= 255: 
+                        key = event.key
+                        if 97 <= key <= 122 and event.mod & KMOD_SHIFT: # A-Z
+                            key -= 32
+                        elif event.mod & KMOD_SHIFT:                    # Other
+                            key = self.shift_keymap[key]
+                        elif 97 <= key <= 122 and event.mod & KMOD_CTRL: # ^A - ^Z
+                            key -= 96
+                        vm.io.input_buffer += bytes([key])
 
-            if tick == 0:
-                for event in pygame.event.get():
-                    if event.type == QUIT:
-                        vm.halted = True
-                    
-                    if event.type == KEYDOWN:
-                        if 0 <= event.key <= 255: 
-                            key = event.key
-                            if 97 <= key <= 122 and event.mod & KMOD_SHIFT: # A-Z
-                                key -= 32
-                            elif event.mod & KMOD_SHIFT:                    # Other
-                                key = self.shift_keymap[key]
-                            elif 97 <= key <= 122 and event.mod & KMOD_CTRL: # ^A - ^Z
-                                key -= 96
-                            vm.io.input_buffer += bytes([key])
-
-                self.screen.fill(self.background)
-                self.screen.blits(self.render_buffer())
-                pygame.display.update()
+            self.screen.fill(self.background)
+            self.screen.blits(self.render_buffer())
+            pygame.display.update()
 
         pygame.quit()
 
