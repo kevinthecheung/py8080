@@ -33,14 +33,19 @@ python altair_basic.py -8 -f wumpus.bas
 
 ## Running CP/M
 
-To run CP/M, first install [PyGame][1] and [Bitstring][2]:
+To run CP/M, first install [PyGame][1]:
 
 ```
-pip install -U pygame bitstring
+poetry install
+```
+
+Or:
+
+```
+pip install -U pygame
 ```
 
 [1]: https://www.pygame.org/
-[2]: https://bitstring.readthedocs.io/
 
 Then, run `cpm.py`, specifying the disk images to load using the `-da`, `-db`,
 `-dc`, ..., `-dp` options. You'll probably want to set `-da` to
