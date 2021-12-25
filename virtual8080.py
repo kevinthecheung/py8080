@@ -26,17 +26,20 @@
 """8080 machine code interpreter."""
 
 import re
+from typing import Callable, Dict, List, Optional
+
+from virtual_device import VirtualDevice
 
 
 class Virtual8080:
 
-    def __init__(self, max_memory=2**16, io=None):
-        self.max_memory = max_memory
-        self.memory = [0 for _ in range(self.max_memory)]
+    def __init__(self, max_memory: int = 2**16, io: Optional[VirtualDevice] = None):
+        self.max_memory: int = max_memory
+        self.memory: List[int] = [0 for _ in range(self.max_memory)]
         self.io = io
-        self.halted = True
+        self.halted: bool = True
 
-        self.registers = {}
+        self.registers: Dict[str, int] = {}
         self.registers['a'] = 0
         self.registers['f'] = 0b00000010
         self.registers['b'] = 0
@@ -48,7 +51,7 @@ class Virtual8080:
         self.registers['sp'] = self.max_memory - 1
         self.registers['pc'] = 0
 
-        self.op = {}
+        self.op: Dict[int, Callable[[], None]] = {}
         self.op[0x00] = self.instr_nop()
         self.op[0x10] = self.instr_nop()
         self.op[0x20] = self.instr_nop()
@@ -321,23 +324,23 @@ class Virtual8080:
         self.op[0xef] = self.instr_reset(5)
         self.op[0xff] = self.instr_reset(7)
 
-    def run(self):
+    def run(self) -> None:
         self.halted = False
         while not self.halted:
             self.step()
 
-    def step(self):
-        pc = self.registers['pc']  # for easier breakpoints
+    def step(self) -> None:
+        _pc = self.registers['pc']  # for easier breakpoints
         opcode = self.get_program_byte()
         self.op[opcode]()
     
-    def load(self, data, offset=0):
+    def load(self, data: bytes, offset: int = 0) -> None:
         i = offset
         for c in data:
             self.memory[i] = c
             i += 1
     
-    def load_hex(self, hex_str):
+    def load_hex(self, hex_str: str) -> None:
         hex_re = re.compile(
             r'^:(?P<length>[0-9a-f]{2})(?P<address>[0-9a-f]{4})(?P<type>[0-9a-f]{2})(?P<data>[0-9a-f]*?)(?P<checksum>[0-9a-f]{2})$',
             flags=re.IGNORECASE
@@ -361,44 +364,44 @@ class Virtual8080:
                 return
 
     
-    def get_mem(self, addr):
+    def get_mem(self, addr: int) -> int:
         return self.memory[addr] if addr < self.max_memory else 0
     
-    def set_mem(self, addr, val):
+    def set_mem(self, addr: int, val: int):
         if addr < self.max_memory:
             self.memory[addr] = val
 
-    def set_flag_sign(self, val):
+    def set_flag_sign(self, val: int) -> None:
         self.registers['f'] = (self.registers['f'] & 0b01111111) ^ (val << 7)
 
-    def set_flag_zero(self, val):
+    def set_flag_zero(self, val: int) -> None:
         self.registers['f'] = (self.registers['f'] & 0b10111111) ^ (val << 6)
 
-    def set_flag_auxcarry(self, val):
+    def set_flag_auxcarry(self, val: int) -> None:
         self.registers['f'] = (self.registers['f'] & 0b11101111) ^ (val << 4)
 
-    def set_flag_parity(self, val):
+    def set_flag_parity(self, val: int) -> None:
         self.registers['f'] = (self.registers['f'] & 0b11111011) ^ (val << 2)
 
-    def set_flag_carry(self, val):
+    def set_flag_carry(self, val: int) -> None:
         self.registers['f'] = (self.registers['f'] & 0b11111110) ^ val
 
-    def get_flag_sign(self):
+    def get_flag_sign(self) -> int:
         return (self.registers['f'] & 0b10000000) >> 7
 
-    def get_flag_zero(self):
+    def get_flag_zero(self) -> int:
         return (self.registers['f'] & 0b01000000) >> 6
 
-    def get_flag_auxcarry(self):
+    def get_flag_auxcarry(self) -> int:
         return (self.registers['f'] & 0b00010000) >> 4
 
-    def get_flag_parity(self):
+    def get_flag_parity(self) -> int:
         return (self.registers['f'] & 0b00000100) >> 2
 
-    def get_flag_carry(self):
+    def get_flag_carry(self) -> int:
         return (self.registers['f'] & 0b00000001)
 
-    def get_program_byte(self):
+    def get_program_byte(self) -> int:
         val = self.get_mem(self.registers['pc'])
         self.registers['pc'] += 1
         return val
@@ -407,60 +410,60 @@ class Virtual8080:
     ## 8-bit load/store/move instructions
     ##
 
-    def instr_mov_reg_reg(self, dest, src):
-        def fn():
+    def instr_mov_reg_reg(self, dest: str, src: str) -> Callable[[], None]:
+        def fn() -> None:
             self.registers[dest] = self.registers[src]
         return fn
 
-    def instr_mov_reg_immed(self, dest):
-        def fn():
+    def instr_mov_reg_immed(self, dest: str) -> Callable[[], None]:
+        def fn() -> None:
             val = self.get_program_byte()
             self.registers[dest] = val
         return fn
 
-    def instr_mov_reg_mem(self, dest):
-        def fn():
+    def instr_mov_reg_mem(self, dest: str) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             self.registers[dest] = self.get_mem(addr)
         return fn
 
-    def instr_mov_mem_reg(self, src):
-        def fn():
+    def instr_mov_mem_reg(self, src: str) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             self.set_mem(addr, self.registers[src])
         return fn
 
-    def instr_mov_mem_immed(self):
-        def fn():
+    def instr_mov_mem_immed(self) -> Callable[[], None]:
+        def fn() -> None:
             val = self.get_program_byte()
             addr = (self.registers['h'] << 8) | self.registers['l']
             self.set_mem(addr, val)
         return fn
 
-    def instr_sta(self):
-        def fn():
+    def instr_sta(self) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
             self.set_mem(addr, self.registers['a'])
         return fn
 
-    def instr_stax(self, addr_hi, addr_lo):
-        def fn():
+    def instr_stax(self, addr_hi: str, addr_lo: str) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers[addr_hi] << 8) | self.registers[addr_lo]
             self.set_mem(addr, self.registers['a'])
         return fn
 
-    def instr_lda(self):
-        def fn():
+    def instr_lda(self) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
             self.registers['a'] = self.get_mem(addr)
         return fn
 
-    def instr_ldax(self, addr_hi, addr_lo):
-        def fn():
+    def instr_ldax(self, addr_hi: str, addr_lo: str):
+        def fn() -> None:
             addr = (self.registers[addr_hi] << 8) | self.registers[addr_lo]
             self.registers['a'] = self.get_mem(addr)
         return fn
@@ -469,29 +472,29 @@ class Virtual8080:
     ## 16-bit load/store/move instructions
     ##
 
-    def instr_lxi(self, dest_hi, dest_lo):
-        def fn():
+    def instr_lxi(self, dest_hi: str, dest_lo: str) -> Callable[[], None]:
+        def fn() -> None:
             self.registers[dest_lo] = self.get_program_byte()
             self.registers[dest_hi] = self.get_program_byte()
         return fn
 
-    def instr_lxi_sp(self):
-        def fn():
+    def instr_lxi_sp(self) -> Callable[[], None]:
+        def fn() -> None:
             lo = self.get_program_byte()
             hi = self.get_program_byte()
             self.registers['sp'] = (hi << 8) | lo
         return fn
 
-    def instr_sphl(self):
-        def fn():
+    def instr_sphl(self) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.registers['l']
             hi_addr = self.registers['h']
             addr = (hi_addr << 8) | lo_addr
             self.registers['sp'] = addr
         return fn
 
-    def instr_pop(self, dest_hi, dest_lo):
-        def fn():
+    def instr_pop(self, dest_hi: str, dest_lo: str) -> Callable[[], None]:
+        def fn() -> None:
             sp = self.registers['sp']
             self.registers[dest_lo] = self.get_mem(sp)
             if dest_lo == 'f':
@@ -501,16 +504,16 @@ class Virtual8080:
             self.registers['sp'] += 2
         return fn
 
-    def instr_push(self, src_hi, src_lo):
-        def fn():
+    def instr_push(self, src_hi: str, src_lo: str) -> Callable[[], None]:
+        def fn() -> None:
             sp = self.registers['sp']
             self.set_mem(sp - 1, self.registers[src_hi])
             self.set_mem(sp - 2, self.registers[src_lo])
             self.registers['sp'] -= 2
         return fn
 
-    def instr_shld(self):
-        def fn():
+    def instr_shld(self) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
@@ -518,8 +521,8 @@ class Virtual8080:
             self.set_mem(addr + 1, self.registers['h'])
         return fn
 
-    def instr_lhld(self):
-        def fn():
+    def instr_lhld(self) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
@@ -527,14 +530,14 @@ class Virtual8080:
             self.registers['h'] = self.get_mem(addr + 1)
         return fn
 
-    def instr_xchg(self):
-        def fn():
+    def instr_xchg(self) -> Callable[[], None]:
+        def fn() -> None:
             self.registers['h'], self.registers['d'] = self.registers['d'], self.registers['h']
             self.registers['l'], self.registers['e'] = self.registers['e'], self.registers['l']
         return fn
 
-    def instr_xthl(self):
-        def fn():
+    def instr_xthl(self) -> Callable[[], None]:
+        def fn() -> None:
             sp = self.registers['sp']
             val_lo = self.get_mem(sp)
             val_hi = self.get_mem(sp + 1)
@@ -548,8 +551,8 @@ class Virtual8080:
     ## 8-bit logic/arithmetic instructions
     ##
 
-    def instr_add_reg(self, src):
-        def fn():
+    def instr_add_reg(self, src: str) -> Callable[[], None]:
+        def fn() -> None:
             sum = self.registers['a'] + self.registers[src]
             lsn_sum = (self.registers['a'] & 0x0f) + (self.registers[src] & 0x0f)
             result = sum % 256
@@ -561,8 +564,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_adc_reg(self, src):
-        def fn():
+    def instr_adc_reg(self, src: str) -> Callable[[], None]:
+        def fn() -> None:
             sum = self.registers['a'] + self.registers[src] + self.get_flag_carry()
             lsn_sum = (self.registers['a'] & 0x0f) + (self.registers[src] & 0x0f) + self.get_flag_carry()
             result = sum % 256
@@ -574,8 +577,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_sub_reg(self, src):
-        def fn():
+    def instr_sub_reg(self, src: str) -> Callable[[], None]:
+        def fn() -> None:
             diff = self.registers['a'] - self.registers[src]
             lsn_diff = (self.registers['a'] & 0x0f) - (self.registers[src] & 0x0f)
             result = diff % 256
@@ -587,8 +590,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_sbb_reg(self, src):
-        def fn():
+    def instr_sbb_reg(self, src: str) -> Callable[[], None]:
+        def fn() -> None:
             diff = self.registers['a'] - self.registers[src] - self.get_flag_carry()
             lsn_diff = (self.registers['a'] & 0x0f) - (self.registers[src] & 0x0f) - self.get_flag_carry()
             result = diff % 256
@@ -600,8 +603,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_ana_reg(self, src):
-        def fn():
+    def instr_ana_reg(self, src: str) -> Callable[[], None]:
+        def fn() -> None:
             result = self.registers['a'] & self.registers[src]
             self.set_flag_sign(result >> 7)
             self.set_flag_zero(1 if result == 0 else 0)
@@ -611,8 +614,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_ora_reg(self, src):
-        def fn():
+    def instr_ora_reg(self, src: str) -> Callable[[], None]:
+        def fn() -> None:
             result = self.registers['a'] | self.registers[src]
             self.set_flag_sign(result >> 7)
             self.set_flag_zero(1 if result == 0 else 0)
@@ -622,8 +625,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_xra_reg(self, src):
-        def fn():
+    def instr_xra_reg(self, src: str) -> Callable[[], None]:
+        def fn() -> None:
             result = self.registers['a'] ^ self.registers[src]
             self.set_flag_sign(result >> 7)
             self.set_flag_zero(1 if result == 0 else 0)
@@ -633,8 +636,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_cmp_reg(self, src):
-        def fn():
+    def instr_cmp_reg(self, src: str) -> Callable[[], None]:
+        def fn() -> None:
             diff = self.registers['a'] - self.registers[src]
             lsn_diff = (self.registers['a'] & 0x0f) - (self.registers[src] & 0x0f)
             result = diff % 256
@@ -645,8 +648,8 @@ class Virtual8080:
             self.set_flag_carry(1 if diff < 0 else 0)
         return fn
 
-    def instr_add_mem(self):
-        def fn():
+    def instr_add_mem(self) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             sum = self.registers['a'] + self.get_mem(addr)
             lsn_sum = (self.registers['a'] &0x0f) + (self.get_mem(addr) & 0x0f)
@@ -659,8 +662,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_adc_mem(self):
-        def fn():
+    def instr_adc_mem(self) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             sum = self.registers['a'] + self.get_mem(addr) + self.get_flag_carry()
             lsn_sum = (self.registers['a'] &0x0f) + (self.get_mem(addr) & 0x0f) + self.get_flag_carry()
@@ -673,8 +676,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_cmp_mem(self):
-        def fn():
+    def instr_cmp_mem(self) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             diff = self.registers['a'] - self.get_mem(addr)
             lsn_diff = (self.registers['a'] & 0x0f) - (self.get_mem(addr) &0x0f)
@@ -686,8 +689,8 @@ class Virtual8080:
             self.set_flag_carry(1 if diff < 0 else 0)
         return fn
 
-    def instr_sub_mem(self):
-        def fn():
+    def instr_sub_mem(self) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             diff = self.registers['a'] - self.get_mem(addr)
             lsn_diff = (self.registers['a'] & 0x0f) - (self.get_mem(addr) &0x0f)
@@ -700,8 +703,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_sbb_mem(self):
-        def fn():
+    def instr_sbb_mem(self) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             diff = self.registers['a'] - self.get_mem(addr) - self.get_flag_carry()
             lsn_diff = (self.registers['a'] & 0x0f) - (self.get_mem(addr) &0x0f) - self.get_flag_carry()
@@ -714,8 +717,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_ana_mem(self):
-        def fn():
+    def instr_ana_mem(self) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             result = self.registers['a'] & self.get_mem(addr)
             self.set_flag_sign(result >> 7)
@@ -726,8 +729,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_ora_mem(self):
-        def fn():
+    def instr_ora_mem(self) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             result = self.registers['a'] | self.get_mem(addr)
             self.set_flag_sign(result >> 7)
@@ -738,8 +741,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_xra_mem(self):
-        def fn():
+    def instr_xra_mem(self) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             result = self.registers['a'] ^ self.get_mem(addr)
             self.set_flag_sign(result >> 7)
@@ -750,8 +753,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_add_immed(self):
-        def fn():
+    def instr_add_immed(self) -> Callable[[], None]:
+        def fn() -> None:
             immed = self.get_program_byte()
             sum = self.registers['a'] + immed
             lsn_sum = (self.registers['a'] & 0x0f) + (immed & 0x0f)
@@ -764,8 +767,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_adc_immed(self):
-        def fn():
+    def instr_adc_immed(self) -> Callable[[], None]:
+        def fn() -> None:
             immed = self.get_program_byte()
             sum_ = self.registers['a'] + immed + self.get_flag_carry()
             lsn_sum = (self.registers['a'] & 0x0f) + (immed & 0x0f) + self.get_flag_carry()
@@ -778,8 +781,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_cmp_immed(self):
-        def fn():
+    def instr_cmp_immed(self) -> Callable[[], None]:
+        def fn() -> None:
             immed = self.get_program_byte()
             diff = self.registers['a'] - immed
             lsn_diff = (self.registers['a'] & 0x0f) - (immed & 0x0f)
@@ -791,8 +794,8 @@ class Virtual8080:
             self.set_flag_carry(1 if diff < 0 else 0)
         return fn
 
-    def instr_sub_immed(self):
-        def fn():
+    def instr_sub_immed(self) -> Callable[[], None]:
+        def fn() -> None:
             immed = self.get_program_byte()
             diff = self.registers['a'] - immed
             lsn_diff = (self.registers['a'] & 0x0f) - (immed & 0x0f)
@@ -805,8 +808,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_sbb_immed(self):
-        def fn():
+    def instr_sbb_immed(self) -> Callable[[], None]:
+        def fn() -> None:
             immed = self.get_program_byte()
             diff = self.registers['a'] - immed - self.get_flag_carry()
             lsn_diff = (self.registers['a'] & 0x0f) - (immed & 0x0f) - self.get_flag_carry()
@@ -819,8 +822,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_ana_immed(self):
-        def fn():
+    def instr_ana_immed(self) -> Callable[[], None]:
+        def fn() -> None:
             immed = self.get_program_byte()
             result = self.registers['a'] & immed
             self.set_flag_sign(result >> 7)
@@ -831,8 +834,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_ora_immed(self):
-        def fn():
+    def instr_ora_immed(self) -> Callable[[], None]:
+        def fn() -> None:
             immed = self.get_program_byte()
             result = self.registers['a'] | immed
             self.set_flag_sign(result >> 7)
@@ -843,8 +846,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_xra_immed(self):
-        def fn():
+    def instr_xra_immed(self) -> Callable[[], None]:
+        def fn() -> None:
             immed = self.get_program_byte()
             result = self.registers['a'] ^ immed
             self.set_flag_sign(result >> 7)
@@ -855,8 +858,8 @@ class Virtual8080:
             self.registers['a'] = result
         return fn
 
-    def instr_inc_reg(self, reg):
-        def fn():
+    def instr_inc_reg(self, reg: str) -> Callable[[], None]:
+        def fn() -> None:
             result = (self.registers[reg] + 1) % 256
             self.set_flag_sign(result >> 7)
             self.set_flag_zero(1 if result == 0 else 0)
@@ -865,8 +868,8 @@ class Virtual8080:
             self.registers[reg] = result
         return fn
 
-    def instr_inc_mem(self):
-        def fn():
+    def instr_inc_mem(self) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             result = (self.get_mem(addr) + 1) % 256
             self.set_flag_sign(result >> 7)
@@ -876,8 +879,8 @@ class Virtual8080:
             self.set_mem(addr, result)
         return fn
 
-    def instr_dcr_reg(self, reg):
-        def fn():
+    def instr_dcr_reg(self, reg: str) -> Callable[[], None]:
+        def fn() -> None:
             result = (self.registers[reg] - 1) % 256
             self.set_flag_sign(result >> 7)
             self.set_flag_zero(1 if result == 0 else 0)
@@ -886,8 +889,8 @@ class Virtual8080:
             self.registers[reg] = result
         return fn
 
-    def instr_dcr_mem(self):
-        def fn():
+    def instr_dcr_mem(self) -> Callable[[], None]:
+        def fn() -> None:
             addr = (self.registers['h'] << 8) | self.registers['l']
             result = (self.get_mem(addr) - 1) % 256
             self.set_flag_sign(result >> 7)
@@ -897,51 +900,51 @@ class Virtual8080:
             self.set_mem(addr, result)
         return fn
     
-    def instr_rlc(self):
-        def fn():
+    def instr_rlc(self) -> Callable[[], None]:
+        def fn() -> None:
             self.set_flag_carry((self.registers['a'] & 0b10000000) >> 7)
             self.registers['a'] = (((self.registers['a'] << 1) & 0xff)
                                    | self.get_flag_carry())
         return fn
     
-    def instr_ral(self):
-        def fn():
+    def instr_ral(self) -> Callable[[], None]:
+        def fn() -> None:
             c = self.get_flag_carry()
             self.set_flag_carry((self.registers['a'] & 0b10000000) >> 7)
             self.registers['a'] = ((self.registers['a'] << 1) & 0xff) | c
         return fn
     
-    def instr_rrc(self):
-        def fn():
+    def instr_rrc(self) -> Callable[[], None]:
+        def fn() -> None:
             self.set_flag_carry(self.registers['a'] & 0b00000001)
             self.registers['a'] = ((self.registers['a'] >> 1)
                                    | (self.get_flag_carry() << 7))
         return fn
     
-    def instr_rar(self):
-        def fn():
+    def instr_rar(self) -> Callable[[], None]:
+        def fn() -> None:
             c = self.get_flag_carry()
             self.set_flag_carry(self.registers['a'] & 0b00000001)
             self.registers['a'] = ((self.registers['a'] >> 1) | (c << 7))
         return fn
 
-    def instr_cma(self):
-        def fn():
+    def instr_cma(self) -> Callable[[], None]:
+        def fn() -> None:
             self.registers['a'] = self.registers['a'] ^ 0xff
         return fn
 
-    def instr_stc(self):
-        def fn():
+    def instr_stc(self) -> Callable[[], None]:
+        def fn() -> None:
             self.set_flag_carry(1)
         return fn
 
-    def instr_cmc(self):
-        def fn():
+    def instr_cmc(self) -> Callable[[], None]:
+        def fn() -> None:
             self.set_flag_carry(0 if self.get_flag_carry() else 1)
         return fn
 
-    def instr_daa(self):
-        def fn():
+    def instr_daa(self) -> Callable[[], None]:
+        def fn() -> None:
             acc = self.registers['a']
             carry = self.get_flag_carry()
             aux_carry = self.get_flag_auxcarry()
@@ -971,8 +974,8 @@ class Virtual8080:
     ## 16-bit logic/arithmetic instructions
     ##
 
-    def instr_dad(self, hi, lo):
-        def fn():
+    def instr_dad(self, hi: str, lo: str) -> Callable[[], None]:
+        def fn() -> None:
             acc = (self.registers['h'] << 8) | self.registers['l']
             operand = (self.registers[hi] << 8) | self.registers[lo]
             sum_ = acc + operand
@@ -984,8 +987,8 @@ class Virtual8080:
             self.set_flag_carry(1 if sum_ > 0xffff else 0)
         return fn
 
-    def instr_dad_sp(self):
-        def fn():
+    def instr_dad_sp(self) -> Callable[[], None]:
+        def fn() -> None:
             acc = (self.registers['h'] << 8) | self.registers['l']
             operand = self.registers['sp']
             sum_ = acc + operand
@@ -997,8 +1000,8 @@ class Virtual8080:
             self.set_flag_carry(1 if sum_ > 0xffff else 0)
         return fn
 
-    def instr_inx(self, hi, lo):
-        def fn():
+    def instr_inx(self, hi: str, lo: str) -> Callable[[], None]:
+        def fn() -> None:
             val = (self.registers[hi] << 8) | self.registers[lo]
             val = (val + 1) % 65536
             val_hi = (val & 0xff00) >> 8
@@ -1007,13 +1010,13 @@ class Virtual8080:
             self.registers[lo] = val_lo
         return fn
 
-    def instr_inx_sp(self):
-        def fn():
+    def instr_inx_sp(self) -> Callable[[], None]:
+        def fn() -> None:
             self.registers['sp'] = (self.registers['sp'] + 1) % 65536
         return fn
 
-    def instr_dcx(self, hi, lo):
-        def fn():
+    def instr_dcx(self, hi: str, lo: str) -> Callable[[], None]:
+        def fn() -> None:
             val = (self.registers[hi] << 8) | self.registers[lo]
             val = (val - 1) % 65536
             val_hi = (val & 0xff00) >> 8
@@ -1022,8 +1025,8 @@ class Virtual8080:
             self.registers[lo] = val_lo
         return fn
 
-    def instr_dcx_sp(self):
-        def fn():
+    def instr_dcx_sp(self) -> Callable[[], None]:
+        def fn() -> None:
             self.registers['sp'] = (self.registers['sp'] - 1) % 65536
         return fn
 
@@ -1031,53 +1034,53 @@ class Virtual8080:
     ## Jump/call instructions
     ##
 
-    def instr_ret(self):
-        def fn():
+    def instr_ret(self) -> Callable[[], None]:
+        def fn() -> None:
             self.return_from_sub()
         return fn
 
-    def instr_ret_zero(self, cmp):
-        def fn():
+    def instr_ret_zero(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             if self.get_flag_zero() == cmp:
                 self.return_from_sub()
         return fn
 
-    def instr_ret_carry(self, cmp):
-        def fn():
+    def instr_ret_carry(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             if self.get_flag_carry() == cmp:
                 self.return_from_sub()
         return fn
 
-    def instr_ret_parity(self, cmp):
-        def fn():
+    def instr_ret_parity(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             if self.get_flag_parity() == cmp:
                 self.return_from_sub()
         return fn
 
-    def instr_ret_sign(self, cmp):
-        def fn():
+    def instr_ret_sign(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             if self.get_flag_sign() == cmp:
                 self.return_from_sub()
         return fn
 
-    def instr_pchl(self):
-        def fn():
+    def instr_pchl(self) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.registers['l']
             hi_addr = self.registers['h']
             addr = (hi_addr << 8) | lo_addr
             self.registers['pc'] = addr
         return fn
 
-    def instr_jmp(self):
-        def fn():
+    def instr_jmp(self) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
             self.registers['pc'] = addr
         return fn
 
-    def instr_jmp_zero(self, cmp):
-        def fn():
+    def instr_jmp_zero(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
@@ -1085,8 +1088,8 @@ class Virtual8080:
                 self.registers['pc'] = addr
         return fn
 
-    def instr_jmp_carry(self, cmp):
-        def fn():
+    def instr_jmp_carry(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
@@ -1094,8 +1097,8 @@ class Virtual8080:
                 self.registers['pc'] = addr
         return fn
 
-    def instr_jmp_parity(self, cmp):
-        def fn():
+    def instr_jmp_parity(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
@@ -1103,8 +1106,8 @@ class Virtual8080:
                 self.registers['pc'] = addr
         return fn
 
-    def instr_jmp_sign(self, cmp):
-        def fn():
+    def instr_jmp_sign(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
@@ -1112,16 +1115,16 @@ class Virtual8080:
                 self.registers['pc'] = addr
         return fn
 
-    def instr_call(self):
-        def fn():
+    def instr_call(self) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
             self.call_sub(addr)
         return fn
 
-    def instr_call_zero(self, cmp):
-        def fn():
+    def instr_call_zero(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
@@ -1129,8 +1132,8 @@ class Virtual8080:
                 self.call_sub(addr)
         return fn
 
-    def instr_call_carry(self, cmp):
-        def fn():
+    def instr_call_carry(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
@@ -1138,8 +1141,8 @@ class Virtual8080:
                 self.call_sub(addr)
         return fn
 
-    def instr_call_parity(self, cmp):
-        def fn():
+    def instr_call_parity(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
@@ -1147,8 +1150,8 @@ class Virtual8080:
                 self.call_sub(addr)
         return fn
 
-    def instr_call_sign(self, cmp):
-        def fn():
+    def instr_call_sign(self, cmp: int) -> Callable[[], None]:
+        def fn() -> None:
             lo_addr = self.get_program_byte()
             hi_addr = self.get_program_byte()
             addr = (hi_addr << 8) | lo_addr
@@ -1156,20 +1159,20 @@ class Virtual8080:
                 self.call_sub(addr)
         return fn
 
-    def instr_reset(self, exp):
-        def fn():
+    def instr_reset(self, exp: int) -> Callable[[], None]:
+        def fn() -> None:
             addr = exp << 3
             self.call_sub(addr)
         return fn
 
-    def return_from_sub(self):
+    def return_from_sub(self) -> None:
         sp = self.registers['sp']
         addr_lo = self.get_mem(sp)
         addr_hi = self.get_mem(sp + 1)
         self.registers['pc'] = (addr_hi << 8) | addr_lo
         self.registers['sp'] += 2
 
-    def call_sub(self, addr):
+    def call_sub(self, addr: int) -> None:
         pc = self.registers['pc']
         sp = self.registers['sp']
         self.set_mem(sp - 1, (pc & 0xff00) >> 8)
@@ -1181,42 +1184,45 @@ class Virtual8080:
     ## Misc. instructions
     ##
 
-    def instr_nop(self):
-        def fn():
+    def instr_nop(self) -> Callable[[], None]:
+        def fn() -> None:
             pass
         return fn
 
-    def instr_halt(self):
-        def fn():
+    def instr_halt(self) -> Callable[[], None]:
+        def fn() -> None:
             self.halted = True
             self.registers['pc'] -= 1
         return fn
 
-    def instr_ei(self):
-        def fn():
+    def instr_ei(self) -> Callable[[], None]:
+        def fn() -> None:
             pass
         return fn
 
-    def instr_di(self):
-        def fn():
+    def instr_di(self) -> Callable[[], None]:
+        def fn() -> None:
             pass
         return fn
 
-    def instr_in(self):
-        def fn():
+    def instr_in(self) -> Callable[[], None]:
+        def fn() -> None:
             port_addr = self.get_program_byte()
-            self.registers['a'] = self.io.get_input(port_addr)
+            ch = self.io.get_input(port_addr) if self.io is not None else None
+            if ch is not None:
+                self.registers['a'] = ch
         return fn
 
-    def instr_out(self):
-        def fn():
+    def instr_out(self) -> Callable[[], None]:
+        def fn() -> None:
             port_addr = self.get_program_byte()
             val = self.registers['a']
-            self.io.send_output(port_addr, val)
+            if self.io is not None:
+                self.io.send_output(port_addr, val)
         return fn
 
 
-def parity(n):
+def parity(n: int) -> int:
     num = n
     ones = 0
     for _ in range(8):

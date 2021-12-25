@@ -23,54 +23,18 @@
 #
 # For more information, please refer to <https://unlicense.org>
 
-"""Run 8080EX1 to test emulation correctness."""
+"""Abstract class representing the I/O devices connected to an 8080."""
+
+from abc import ABC, abstractmethod
+from typing import Optional
 
 
-import datetime
-import time
+class VirtualDevice(ABC):
 
-from virtual8080 import Virtual8080
-from virtual_device import VirtualDevice
+    @abstractmethod
+    def get_input(self, port_addr: int) -> Optional[int]:
+        pass
 
-
-class StubIO(VirtualDevice):
-
-    def get_input(self, port_addr: int) -> int:
-        return 0
-
+    @abstractmethod
     def send_output(self, port_addr: int, value: int) -> None:
-        ch = value & 0b01111111
-        print(bytes([ch]).decode(encoding='ascii'), end='', flush=True)
-
-
-def run(program_file: str, bdos_file: str) -> None:
-    vm = Virtual8080()
-    vm.io = StubIO()
-
-    with open(program_file, 'r') as f:
-        program = f.read()
-    vm.load_hex(program)
-
-    with open(bdos_file, 'r') as f:
-        bdos = f.read()
-    vm.load_hex(bdos)
-
-    vm.registers['pc'] = 0x0100 
-    vm.run()
-
-
-if __name__ == '__main__':
-    program_file = './8080exer/8080EX1.HEX'
-    bdos_file = './8080exer/bdos-emu.hex'
-
-    start_time = time.time()
-    start_time_str = time.strftime('%H:%M:%S', time.localtime(start_time))
-    print(f'Starting the exerciser at {start_time_str}. This is going to take'
-           ' a while.\n')
-
-    run(program_file, bdos_file)
-
-    end_time = time.time()
-    end_time_str = time.strftime('%H:%M:%S', time.localtime(end_time))
-    elapsed_time = datetime.timedelta(seconds=(end_time - start_time))
-    print(f'\nFinished at {end_time_str} (elapsed time: {elapsed_time}).')
+        pass

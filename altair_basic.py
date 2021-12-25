@@ -29,17 +29,21 @@ Good enough to run 4K BASIC, 8K BASIC, and Extended BASIC."""
 
 
 import argparse
+from typing import Optional
+
 from kbhit import KBHit
+
 from virtual8080 import Virtual8080
+from virtual_device import VirtualDevice
 
 
-class AltairWithTerminal:
+class AltairWithTerminal(VirtualDevice):
 
     def __init__(self):
-        self.input_buffer = b''
-        self.output_char = -1
+        self.input_buffer: bytes = b''
+        self.output_char: int = -1
 
-    def get_input(self, port_addr):
+    def get_input(self, port_addr: int) -> int:
         if port_addr == 0xff:
             # Altair "sense switches". 0b0000xxxx means the console is on a
             # 2SIO configured with the console status/control register on port
@@ -61,29 +65,30 @@ class AltairWithTerminal:
                 ch = self.input_buffer[0]
                 self.input_buffer = self.input_buffer[1:]
                 return ch
+            return 0  # Okay?
         else:
             return 0
 
-    def send_output(self, port_addr, val):
+    def send_output(self, port_addr: int, value: int) -> None:
         if port_addr == 0x10:
             # Control register
             pass
         elif port_addr == 0x11:
             # I/O register
-            self.output_char = val & 0b01111111
+            self.output_char = value & 0b01111111
 
 
-def console_run(program_file, autorun_file=None, init_str=''):
+def console_run(program_file: str, autorun_file: Optional[str] = None, init_str: str = ''):
     vm = Virtual8080()
     vm.io = AltairWithTerminal()
-    with open(program_file, 'rb') as f:
-        program = f.read()
+    with open(program_file, 'rb') as pf:
+        program = pf.read()
     vm.load(program)
 
     if autorun_file is not None:
         init_buffer = init_str
-        with open(autorun_file, 'r') as f:
-            for line in f.readlines():
+        with open(autorun_file, 'r') as af:
+            for line in af.readlines():
                 init_buffer += line.replace('\n', '\r')
         vm.io.input_buffer = init_buffer.encode(encoding='ascii')
 

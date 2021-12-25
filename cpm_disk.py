@@ -23,22 +23,31 @@
 #
 # For more information, please refer to <https://unlicense.org>
 
+from typing import List, Optional, Union
+
 
 class CPM_Disk:
 
-    def __init__(self, image_file, sector_size, sectors_per_track, num_tracks, skew, write_protect=False):
-        self.image_file = image_file
-        self.sector_size = sector_size
-        self.sectors_per_track = sectors_per_track
-        self.write_protect = write_protect
+    def __init__(self,
+                 image_file: str,
+                 sector_size: int,
+                 sectors_per_track: int,
+                 num_tracks: int,
+                 skew: Union[int, List[int]],
+                 write_protect: bool = False):
+        self.image_file: str = image_file
+        self.sector_size: int = sector_size
+        self.sectors_per_track: int = sectors_per_track
+        self.write_protect: bool = write_protect
+        self.disk_tracks: List[List[bytes]] = []
+        self.skew_table: List[int]
 
-        self.disk_tracks = []
         with open(image_file, 'rb') as f:
             disk_bytes = f.read()
         total_bytes = sector_size * sectors_per_track * num_tracks
         disk_bytes += bytes([0xe5 for _ in range(total_bytes - len(disk_bytes))])
         for _ in range(num_tracks):
-            tmp_track = []
+            tmp_track: List[bytes] = []
             for _ in range(sectors_per_track):
                 tmp_sect = disk_bytes[0:sector_size]
                 disk_bytes = disk_bytes[sector_size:]
@@ -51,18 +60,18 @@ class CPM_Disk:
             self.skew_table = skew
     
 
-    def get_sector(self, track, sector):
+    def get_sector(self, track: int, sector: int) -> bytes:
         raw_sector = self.skew_table[sector - 1] - 1
         return self.disk_tracks[track][raw_sector]
     
 
-    def set_sector(self, track, sector, sector_data):
+    def set_sector(self, track: int, sector: int, sector_data: bytes) -> None:
         if not self.write_protect:
             raw_sector = self.skew_table[sector - 1] - 1
             self.disk_tracks[track][raw_sector] = sector_data
     
 
-    def save_image(self, image_file=None):
+    def save_image(self, image_file: Optional[str] = None) -> None:
         if image_file is None:
             image_file = self.image_file
         with open(image_file, 'wb') as f:
@@ -71,7 +80,7 @@ class CPM_Disk:
                     f.write(sector)
 
 
-def make_skew_table(num_sectors, skew_factor):
+def make_skew_table(num_sectors: int, skew_factor: int) -> List[int]:
     skew_table = [0]
     while len(skew_table) < num_sectors:
         sec = (skew_table[-1] + skew_factor) % num_sectors

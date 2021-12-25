@@ -30,29 +30,34 @@ Emulated machine has 16 8" 250 KB floppy disk drives and an ADM-3A terminal."""
 
 import argparse
 import os
+from typing import Dict, List, Optional, Tuple
 
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
-from pygame.locals import *
+from pygame.constants import KEYDOWN, KMOD_CTRL, KMOD_SHIFT, QUIT
+from pygame.font import Font
+from pygame.rect import Rect
+from pygame.surface import Surface
 
 from virtual8080 import Virtual8080
+from virtual_device import VirtualDevice
 from cpm_disk import CPM_Disk
 
 
-class CPM_Machine:
+class CPM_Machine(VirtualDevice):
 
-    def __init__(self, vm, disk_images=[]):
-        self.vm = vm
+    def __init__(self, vm: Virtual8080, disk_images: List[str] = []):
+        self.vm: Virtual8080 = vm
 
-        self.input_buffer = b''
-        self.output_char = -1
+        self.input_buffer: bytes = b''
+        self.output_char: int = -1
 
-        self.dma_addr = 0
-        self.disk_controller_error = 0
+        self.dma_addr: int = 0
+        self.disk_controller_error: int = 0
 
-        self.current_drive = 0
-        self.drive_status = [{'track': 0, 'sector': 0} for _ in range(16)]
-        self.disk_image = [None for _ in range(16)]
+        self.current_drive: int = 0
+        self.drive_status: List[Dict[str, int]] = [{'track': 0, 'sector': 0} for _ in range(16)]
+        self.disk_image: List[Optional[CPM_Disk]] = [None for _ in range(16)]
         for i, fn in enumerate(disk_images):
             if fn is not None:
                 self.drive_status[i] = {'track': 0, 'sector': 0}
@@ -62,16 +67,22 @@ class CPM_Machine:
         self.vm.load(boot_sector)
 
 
-    def read_disk(self, drive, track, sector):
-        return self.disk_image[drive].get_sector(track, sector)
+    def read_disk(self, drive_num: int, track: int, sector: int) -> bytes:
+        drive = self.disk_image[drive_num]
+        if drive is not None:
+            return drive.get_sector(track, sector)
+        else:
+            raise ValueError
 
 
-    def write_disk(self, drive, track, sector, sector_data):
-        self.disk_image[drive].set_sector(track, sector, sector_data)
-        self.disk_image[drive].save_image()
+    def write_disk(self, drive_num: int, track: int, sector: int, sector_data: bytes) -> None:
+        drive = self.disk_image[drive_num]
+        if drive is not None:
+            drive.set_sector(track, sector, sector_data)
+            drive.save_image()
 
 
-    def get_input(self, port_addr):
+    def get_input(self, port_addr: int) -> Optional[int]:
         if port_addr == 0:
             # Console status
             if len(self.input_buffer) > 0:
@@ -86,7 +97,7 @@ class CPM_Machine:
                 return c
             else:
                 self.vm.registers['pc'] -= 2  # Loop again with same PC
-                return
+                return None
         elif port_addr == 2:
             # List device status
             return 1  # Ready
@@ -96,18 +107,18 @@ class CPM_Machine:
         raise Exception
 
 
-    def send_output(self, port_addr, val):
+    def send_output(self, port_addr: int, value: int) -> None:
         if port_addr == 1:
             # Console output
-            self.output_char = val
+            self.output_char = value
             return
         elif port_addr == 3:
             # List device output
-            print(chr(val), end='', flush=True)
+            print(chr(value), end='', flush=True)
             return
         elif port_addr == 0xf9:
             # Disk read/write commands
-            if val == 0:
+            if value == 0:
                 # Read current drive/track/sector into [dma]
                 if self.disk_image[self.current_drive] is not None:
                     data = self.read_disk(self.current_drive,
@@ -119,10 +130,11 @@ class CPM_Machine:
                 else:
                     self.disk_controller_error = 0xff  # Error
                 return
-            elif val == 1:
+            elif value == 1:
                 # Write [dma] to current drive/track/sector
-                if self.disk_image[self.current_drive] is not None:
-                    sector_size = self.disk_image[self.current_drive].sector_size
+                drive = self.disk_image[self.current_drive]
+                if drive is not None:
+                    sector_size = drive.sector_size
                     sector_data = bytes(self.vm.memory[self.dma_addr:self.dma_addr+sector_size])
                     self.write_disk(self.current_drive,
                                     self.drive_status[self.current_drive]['track'],
@@ -134,23 +146,23 @@ class CPM_Machine:
                 return
         elif port_addr == 0xfa:
             # Disk drive select
-            self.current_drive = val
+            self.current_drive = value
             return
         elif port_addr == 0xfb:
             # Track select
-            self.drive_status[self.current_drive]['track'] = val
+            self.drive_status[self.current_drive]['track'] = value
             return
         elif port_addr == 0xfc:
             # Sector select
-            self.drive_status[self.current_drive]['sector'] = val
+            self.drive_status[self.current_drive]['sector'] = value
             return
         elif port_addr == 0xfd:
             # Set DMA address high byte
-            self.dma_addr = (self.dma_addr & 0x00ff) | (val << 8)
+            self.dma_addr = (self.dma_addr & 0x00ff) | (value << 8)
             return
         elif port_addr == 0xfe:
             # Set DMA address low byte
-            self.dma_addr = (self.dma_addr & 0xff00) | (val & 0x00ff)
+            self.dma_addr = (self.dma_addr & 0xff00) | (value & 0x00ff)
             return
         raise Exception
 
@@ -184,20 +196,20 @@ class CPM_TTY:
         ord('/'): ord('?'),
     }
 
-    def __init__(self, disk_images=[]):
-        self.disk_images = disk_images
+    def __init__(self, disk_images: List[str] = []):
+        self.disk_images: List[str] = disk_images
 
-        self.buffer = bytearray([32 for _ in range(80 * 24)])
-        self.cursor = 0
-        self.esc_sequence = b''
+        self.buffer: bytearray = bytearray([32 for _ in range(80 * 24)])
+        self.cursor: int = 0
+        self.esc_sequence: bytes = b''
 
         pygame.init()
         pygame.display.set_caption('8080 Emulator')
-        self.screen = pygame.display.set_mode((80 * 10 + 10, 24 * 20 + 10))
-        self.font = pygame.font.Font('ter-u20n.bdf', 20)
+        self.screen: Surface = pygame.display.set_mode((80 * 10 + 10, 24 * 20 + 10))
+        self.font: Font = pygame.font.Font('ter-u20n.bdf', 20)
 
 
-    def putch(self, ch):
+    def putch(self, ch: int) -> None:
         ## ADM-3A cursor control
         ch = ch & 0b01111111
         if ch == 27:      # Esc
@@ -240,7 +252,7 @@ class CPM_TTY:
             print(chr(ch & 0x7f), end='', flush=True)
 
 
-    def render_buffer(self):
+    def render_buffer(self) -> List[Tuple[Surface, Rect]]:
         img = self.font.render('█', False, self.foreground)
         col = self.cursor % 80
         row = self.cursor // 80
@@ -258,7 +270,7 @@ class CPM_TTY:
         return blits
 
 
-    def run(self):
+    def run(self) -> None:
         vm = Virtual8080()
         vm.io = CPM_Machine(vm, self.disk_images)
 
