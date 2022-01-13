@@ -30,12 +30,13 @@ Emulated machine has 16 8" 250 KB floppy disk drives and an ADM-3A terminal."""
 
 import argparse
 import os
+import time
 from typing import Dict, List, Optional, Tuple
 
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
 from pygame.constants import KEYDOWN, KMOD_CTRL, KMOD_SHIFT, QUIT
-from pygame.font import Font
+from pygame.freetype import Font
 from pygame.rect import Rect
 from pygame.surface import Surface
 
@@ -204,9 +205,13 @@ class CPM_TTY:
         self.esc_sequence: bytes = b''
 
         pygame.init()
-        pygame.display.set_caption('8080 Emulator')
-        self.screen: Surface = pygame.display.set_mode((80 * 10 + 10, 24 * 20 + 10))
-        self.font: Font = pygame.font.Font('ter-u20n.bdf', 20)
+        pygame.display.set_caption('CP/M')
+        pygame.key.set_repeat(1000, 100)
+
+        self.screen: Surface = pygame.display.set_mode(
+            (80 * 10 + 2 * self.margin, 24 * 20 + 2 * self.margin))
+        self.font: Font = Font('BmPlus_Rainbow100_re_80.otb', 24)
+        self.blink_rate: int = 750
 
 
     def putch(self, ch: int) -> None:
@@ -253,20 +258,50 @@ class CPM_TTY:
 
 
     def render_buffer(self) -> List[Tuple[Surface, Rect]]:
-        img = self.font.render('█', False, self.foreground)
-        col = self.cursor % 80
-        row = self.cursor // 80
-        rect = img.get_rect()
-        rect.topleft = (col * 10 + self.margin, row * 20 + self.margin)
-        rect.size = img.get_size()
-        blits = [(img, rect)]
+        cursor_on = (time.time_ns() // 1000000 // self.blink_rate) % 2 == 0
+        curs_col = self.cursor % 80
+        curs_row = self.cursor // 80
 
-        for row in range(24):
-            img = self.font.render(bytes(self.buffer[80*row:80*row+80]), False, self.foreground)
-            rect = img.get_rect()
+        # Render the cursor
+        if cursor_on:
+            surface, rect = self.font.render(bytes([self.buffer[80*curs_row+curs_col]]),
+                                             fgcolor=self.background,
+                                             bgcolor=self.foreground)
+        else:
+            surface, rect = self.font.render(bytes([self.buffer[80*curs_row+curs_col]]),
+                                             fgcolor=self.foreground,
+                                             bgcolor=self.background)
+        rect.topleft = (curs_col * 10 + self.margin, curs_row * 20 + self.margin)
+        rect.size = surface.get_size()
+        blits = [(surface, rect)]
+
+        # Render rows up to the cursor row
+        for row in range(0, curs_row):
+            surface, rect = self.font.render(bytes(self.buffer[80*row:80*row+80]),
+                                             fgcolor=self.foreground)
             rect.topleft = (self.margin, row * 20 + self.margin)
-            rect.size = img.get_size()
-            blits += [(img, rect)]
+            rect.size = surface.get_size()
+            blits += [(surface, rect)]
+
+        # Render the cursor row, but not the cursor
+        surface, rect = self.font.render(bytes(self.buffer[80*curs_row:80*curs_row+curs_col]),
+                                         fgcolor=self.foreground)
+        rect.topleft = (self.margin, curs_row * 20 + self.margin)
+        rect.size = surface.get_size()
+        blits += [(surface, rect)]
+        surface, rect = self.font.render(bytes(self.buffer[80*curs_row+curs_col+1:80*curs_row+80]),
+                                         fgcolor=self.foreground)
+        rect.topleft = ((curs_col + 1) * 10 + self.margin, curs_row * 20 + self.margin)
+        rect.size = surface.get_size()
+        blits += [(surface, rect)]
+
+        # Render rows after the cursor row
+        for row in range(curs_row+1, 24):
+            surface, rect = self.font.render(bytes(self.buffer[80*row:80*row+80]),
+                                             fgcolor=self.foreground)
+            rect.topleft = (self.margin, row * 20 + self.margin)
+            rect.size = surface.get_size()
+            blits += [(surface, rect)]
         return blits
 
 
@@ -296,7 +331,8 @@ class CPM_TTY:
                         if 97 <= key <= 122 and event.mod & KMOD_SHIFT: # A-Z
                             key -= 32
                         elif event.mod & KMOD_SHIFT:                    # Other
-                            key = self.shift_keymap[key]
+                            if key in self.shift_keymap.keys():
+                                key = self.shift_keymap[key]
                         elif 97 <= key <= 122 and event.mod & KMOD_CTRL: # ^A - ^Z
                             key -= 96
                         vm.io.input_buffer += bytes([key])

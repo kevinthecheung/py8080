@@ -33,17 +33,17 @@ know.
 [1]: https://simondlevy.academic.wlu.edu/files/software/kbhit.py
 [2]: https://www.gnu.org/licenses/lgpl-3.0.html
 
-## Terminus
+## Rainbow100 font
 
 ```
-ter-u20n.bdf
+BmPlus_Rainbow100_re_80.otb
 ```
 
-The [Terminus][3] font is copyright its creators and used under the terms of
-the [SIL Open Font License][4].
+The [Rainbow100][3] font is by VileR and used under the terms of the Creative
+Commons [Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)][4] license.
 
-[3]: http://terminus-font.sourceforge.net/
-[4]: http://scripts.sil.org/OFL
+[3]: https://int10h.org/oldschool-pc-fonts/fontlist/font?rainbow100_re_80
+[4]: https://creativecommons.org/licenses/by-sa/4.0/
 
 ## 8080/8085 CPU Exerciser
 
