@@ -29,6 +29,7 @@ Emulated machine has 16 8" 250 KB floppy disk drives and an ADM-3A terminal."""
 
 
 import argparse
+import datetime
 import os
 import time
 from typing import Dict, List, Optional, Tuple
@@ -43,6 +44,9 @@ from pygame.surface import Surface
 from virtual8080 import Virtual8080
 from virtual_device import VirtualDevice
 from cpm_disk import CPM_Disk
+
+
+TIME_TRAVEL_YEARS = -28
 
 
 class CPM_Machine(VirtualDevice):
@@ -102,6 +106,41 @@ class CPM_Machine(VirtualDevice):
         elif port_addr == 2:
             # List device status
             return 1  # Ready
+        elif port_addr in (0x10, 0x11, 0x12, 0x13, 0x14):
+            # System clock
+            now = datetime.datetime.now()
+            virtually_now = datetime.datetime(now.year + TIME_TRAVEL_YEARS,
+                                              now.month,
+                                              now.day,
+                                              now.hour,
+                                              now.minute,
+                                              now.second)
+            cpm_time = virtually_now.date() - datetime.date(1977, 12, 31)
+            days = cpm_time.days
+            hour = virtually_now.hour
+            minute = virtually_now.minute
+            second = virtually_now.second
+            if port_addr == 0x10:
+                # Day, high byte
+                return (days & 0xFF00) >> 8
+            elif port_addr == 0x11:
+                # Day, low byte
+                return days & 0x00FF
+            elif port_addr == 0x12:
+                # Hour
+                tens = hour // 10
+                ones = hour % 10
+                return (tens << 4) | ones
+            elif port_addr == 0x13:
+                # Minute
+                tens = minute // 10
+                ones = minute % 10
+                return (tens << 4) | ones
+            elif port_addr == 0x14:
+                # Second
+                tens = second // 10
+                ones = second % 10
+                return (tens << 4) | ones
         elif port_addr == 0xf9:
             # Disk error status
             return self.disk_controller_error
@@ -125,7 +164,8 @@ class CPM_Machine(VirtualDevice):
                     data = self.read_disk(self.current_drive,
                                           self.drive_status[self.current_drive]['track'],
                                           self.drive_status[self.current_drive]['sector'])
-                    for i in range(len(data)):
+                    data_len = min(65536 - self.dma_addr, len(data))
+                    for i in range(data_len):
                         self.vm.memory[self.dma_addr + i] = data[i]
                     self.disk_controller_error = 0x00  # OK
                 else:
