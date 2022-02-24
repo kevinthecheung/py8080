@@ -1,7 +1,11 @@
 ;
 ;	CP/M 3.0 BIOS for Python emulator
 ;
-vers	equ	30	;version 3.0
+false	equ 0
+true	equ not false
+;
+vers	equ 30		;version 3.0
+banked	equ true
 ;
 	maclib	cpm3
 	maclib	modebaud
@@ -16,6 +20,15 @@ coniop	equ 1		;console i/o port
 lststp	equ 2		;list status port
 lstiop	equ 3		;list i/o port
 ;
+clock	equ 010h	;base address of clock
+ckdayh	equ clock+0
+ckdayl	equ clock+1
+ckhour	equ clock+2
+ckmin	equ clock+3
+cksec	equ clock+4
+;
+bnksel	equ 020h	;get/set current bank
+;
 disk	equ 0f9h	;base address of disk ports
 dstat	equ disk	;status port
 dcom	equ disk	;command port: 0 = read, 1 = write
@@ -24,17 +37,14 @@ dtrack	equ disk+2	;track port
 dsect	equ disk+3	;sector port
 ddmahi	equ disk+4	;DMA address (high) port
 ddmalo	equ disk+5	;DMA address (low) port
-;
-clock	equ 010h	;base address of clock
-ckdayh	equ clock+0
-ckdayl	equ clock+1
-ckhour	equ clock+2
-ckmin	equ clock+3
-cksec	equ clock+4
+ddmabk	equ disk+6	;DMA bank port
 ;
 bdos	equ 5
 ;
 ;	jump vector for individual subroutines
+  if banked
+	cseg
+  endif
 	jmp	boot		;cold start
 wboote:	jmp	wboot		;warm start
 	jmp	conist		;console status
@@ -82,14 +92,26 @@ tblchr	db	'PYGAME'
 ;
 ;	disk tables
 tbldrv	dw	dph0,dph1,dph2,dph3
-	dw	0,0,0,0
-	dw	0,0,0,0
-	dw	0,0,0,0
+	dw	dph4,dph5,dph6,dph7
+	dw	dph8,dph9,dpha,dphb
+	dw	dphc,dphd,dphe,dphf
 ;
 dph0	dph	tbltrn,dpbstd
 dph1	dph	tbltrn,dpbstd
 dph2	dph	tbltrn,dpbstd
 dph3	dph	tbltrn,dpbstd
+dph4	dph	tbltrn,dpbstd
+dph5	dph	tbltrn,dpbstd
+dph6	dph	tbltrn,dpbstd
+dph7	dph	tbltrn,dpbstd
+dph8	dph	tbltrn,dpbstd
+dph9	dph	tbltrn,dpbstd
+dpha	dph	tbltrn,dpbstd
+dphb	dph	tbltrn,dpbstd
+dphc	dph	tbltrn,dpbstd
+dphd	dph	tbltrn,dpbstd
+dphe	dph	tbltrn,dpbstd
+dphf	dph	tbltrn,dpbstd
 ;
 dpbstd	dpb	128,26,77,1024,64,2
 ;
@@ -116,6 +138,10 @@ boot:
 	; continue to wboot
 ;
 wboot:
+  if banked
+	mvi	a,1
+	out	bnksel
+  endif
 	mvi	a,0C3h		;8080 "jump" opcode
 	sta	0		;store in 1st byte of warm boot vector
 	sta	bdos		;and 1st byte of BDOS entry vector
@@ -126,7 +152,7 @@ wboot:
 	lhld	@mxtpa		;BDOS entry address
 	shld	bdos+1		;put it after the jump opcode
 ldcpm:
-	lxi	sp,0100h
+	lxi	sp,bstack
 ;
 	xra	a		;zero the extent
 	sta	fcbccp+15
@@ -265,6 +291,10 @@ devini:
 ;
 ;	i/o drivers for the disk follow
 ;
+  if banked
+	dseg
+  endif
+;
 home:	;move to the track 00 position of current drive
 ;	translate this call into a settrk call with parameter 00
 	mvi	c,0	;select track 0
@@ -274,27 +304,57 @@ home:	;move to the track 00 position of current drive
 seldsk:	;select disk given by register C
 	mov	a,c
 	out	ddisk
-	cpi	0
-	jz	sel0
-	cpi	1
-	jz	sel1
-	cpi	2
-	jz	sel2
-	cpi	3
-	jz	sel3
-	lxi	h,0
-	ret
-sel0:
+;
 	lxi	h,dph0
-	ret
-sel1:
+	cpi	0
+	rz
 	lxi	h,dph1
-	ret
-sel2:
+	cpi	1
+	rz
 	lxi	h,dph2
-	ret
-sel3:
+	cpi	2
+	rz
 	lxi	h,dph3
+	cpi	3
+	rz
+	lxi	h,dph4
+	cpi	4
+	rz
+	lxi	h,dph5
+	cpi	5
+	rz
+	lxi	h,dph6
+	cpi	6
+	rz
+	lxi	h,dph7
+	cpi	7
+	rz
+	lxi	h,dph8
+	cpi	8
+	rz
+	lxi	h,dph9
+	cpi	9
+	rz
+	lxi	h,dpha
+	cpi	10
+	rz
+	lxi	h,dphb
+	cpi	11
+	rz
+	lxi	h,dphc
+	cpi	12
+	rz
+	lxi	h,dphd
+	cpi	13
+	rz
+	lxi	h,dphe
+	cpi	14
+	rz
+	lxi	h,dphf
+	cpi	15
+	rz
+;
+	lxi	h,0
 	ret
 ;
 settrk:	;set track given by register c
@@ -345,6 +405,10 @@ flush:
 	xra	a
 	ret
 ;
+  if banked
+	cseg
+  endif
+;
 ;	memory functions
 move:
 	ldax	d
@@ -358,9 +422,15 @@ move:
 	ret
 ;
 selmem:
+  if banked
+	out	bnksel
+  endif
 	ret
 ;
 setbnk:
+  if banked
+	out	ddmabk
+  endif
 	ret
 ;
 xmove:
@@ -392,6 +462,12 @@ getime:
 	pop	h
 	ret
 ;
+;	uninitialized memory
+  if banked
+	cseg
+  endif
+	ds	32
+bstack:
 ;
 	end
 ;

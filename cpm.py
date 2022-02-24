@@ -57,6 +57,11 @@ class CPM_Machine(VirtualDevice):
         self.input_buffer: bytes = b''
         self.output_char: int = -1
 
+        self.bank_size: int = 0xF0 << 8
+        self.current_bank: int = 0
+        self.memory_banks: Dict[int, List[int]] = {self.current_bank: [0 for _ in range(self.bank_size)]}
+
+        self.dma_bank: int = self.current_bank
         self.dma_addr: int = 0
         self.disk_controller_error: int = 0
 
@@ -70,6 +75,16 @@ class CPM_Machine(VirtualDevice):
 
         boot_sector = self.read_disk(0, 0, 1)
         self.vm.load(boot_sector)
+
+
+    def select_bank(self, bank_num: int) -> None:
+            if bank_num == self.current_bank:
+                return
+            if bank_num not in self.memory_banks:
+                self.memory_banks[bank_num] = [0 for _ in range(self.bank_size)]
+            self.memory_banks[self.current_bank] = self.vm.memory[:self.bank_size]
+            self.vm.memory[:self.bank_size] = self.memory_banks[bank_num]
+            self.current_bank = bank_num
 
 
     def read_disk(self, drive_num: int, track: int, sector: int) -> bytes:
@@ -141,9 +156,15 @@ class CPM_Machine(VirtualDevice):
                 tens = second // 10
                 ones = second % 10
                 return (tens << 4) | ones
+        elif port_addr == 0x20:
+            # Get currently selected bank
+            return self.current_bank
         elif port_addr == 0xf9:
             # Disk error status
             return self.disk_controller_error
+        elif port_addr == 0xff:
+            # Get DMA bank
+            return self.dma_bank
         raise Exception
 
 
@@ -156,10 +177,16 @@ class CPM_Machine(VirtualDevice):
             # List device output
             print(chr(value), end='', flush=True)
             return
+        elif port_addr == 0x20:
+            # Bank select
+            self.select_bank(value)
+            return
         elif port_addr == 0xf9:
             # Disk read/write commands
             if value == 0:
                 # Read current drive/track/sector into [dma]
+                orig_bank = self.current_bank
+                self.select_bank(self.dma_bank)
                 if self.disk_image[self.current_drive] is not None:
                     data = self.read_disk(self.current_drive,
                                           self.drive_status[self.current_drive]['track'],
@@ -170,9 +197,12 @@ class CPM_Machine(VirtualDevice):
                     self.disk_controller_error = 0x00  # OK
                 else:
                     self.disk_controller_error = 0xff  # Error
+                self.select_bank(orig_bank)
                 return
             elif value == 1:
                 # Write [dma] to current drive/track/sector
+                orig_bank = self.current_bank
+                self.select_bank(self.dma_bank)
                 drive = self.disk_image[self.current_drive]
                 if drive is not None:
                     sector_size = drive.sector_size
@@ -184,6 +214,7 @@ class CPM_Machine(VirtualDevice):
                     self.disk_controller_error = 0x00  # OK
                 else:
                     self.disk_controller_error = 0xff  # Error
+                self.select_bank(orig_bank)
                 return
         elif port_addr == 0xfa:
             # Disk drive select
@@ -204,6 +235,10 @@ class CPM_Machine(VirtualDevice):
         elif port_addr == 0xfe:
             # Set DMA address low byte
             self.dma_addr = (self.dma_addr & 0xff00) | (value & 0x00ff)
+            return
+        elif port_addr == 0xff:
+            # Set DMA bank
+            self.dma_bank = value
             return
         raise Exception
 
