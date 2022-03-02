@@ -442,7 +442,23 @@ time:
 	ora	a	;set flags
 	jz	getime
 setime:
-	ret		;ignore set requests
+	push	h
+;
+	lhld	@date
+	mov	a,h
+	out	ckdayh
+	mov	a,l
+	out	ckdayl
+;
+	lda	@hour
+	out	ckhour
+	lda	@min
+	out	ckmin
+	lda	@sec
+	out	cksec
+;
+	pop	h
+	ret
 getime:
 	push	h
 ;

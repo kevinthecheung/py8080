@@ -29,7 +29,7 @@ Emulated machine has 16 8" 250 KB floppy disk drives and an ADM-3A terminal."""
 
 
 import argparse
-import datetime
+from datetime import date, datetime, timedelta
 import os
 import time
 from typing import Dict, List, Optional, Tuple
@@ -44,9 +44,6 @@ from pygame.surface import Surface
 from virtual8080 import Virtual8080
 from virtual_device import VirtualDevice
 from cpm_disk import CPM_Disk
-
-
-TIME_TRAVEL_YEARS = -28
 
 
 class CPM_Machine(VirtualDevice):
@@ -64,6 +61,9 @@ class CPM_Machine(VirtualDevice):
         self.dma_bank: int = self.current_bank
         self.dma_addr: int = 0
         self.disk_controller_error: int = 0
+
+        self.cpm_epoch = datetime(1977, 12, 31)
+        self.clock_delta: timedelta = timedelta(days=10227)  # 28 years ago
 
         self.current_drive: int = 0
         self.drive_status: List[Dict[str, int]] = [{'track': 0, 'sector': 0} for _ in range(16)]
@@ -123,14 +123,8 @@ class CPM_Machine(VirtualDevice):
             return 1  # Ready
         elif port_addr in (0x10, 0x11, 0x12, 0x13, 0x14):
             # System clock
-            now = datetime.datetime.now()
-            virtually_now = datetime.datetime(now.year + TIME_TRAVEL_YEARS,
-                                              now.month,
-                                              now.day,
-                                              now.hour,
-                                              now.minute,
-                                              now.second)
-            cpm_time = virtually_now.date() - datetime.date(1977, 12, 31)
+            virtually_now = datetime.now() - self.clock_delta
+            cpm_time = virtually_now - self.cpm_epoch
             days = cpm_time.days
             hour = virtually_now.hour
             minute = virtually_now.minute
@@ -176,6 +170,67 @@ class CPM_Machine(VirtualDevice):
         elif port_addr == 3:
             # List device output
             print(chr(value), end='', flush=True)
+            return
+        elif port_addr == 0x10:
+            # Update day from high byte
+            virtually_now = datetime.now() - self.clock_delta
+            cpm_date = (virtually_now - self.cpm_epoch).days
+            cpm_date = (value << 8) | (cpm_date & 0xff)
+            virtually_now = self.cpm_epoch + timedelta(days=cpm_date)
+            self.clock_delta = datetime.now() - virtually_now
+            return
+        elif port_addr == 0x11:
+            # Update day from low byte
+            virtually_now = datetime.now() - self.clock_delta
+            cpm_date = (virtually_now - self.cpm_epoch).days
+            cpm_date = (cpm_date & 0xff00) | value
+            virtually_now = self.cpm_epoch + timedelta(days=cpm_date)
+            self.clock_delta = datetime.now() - virtually_now
+            return
+        elif port_addr == 0x12:
+            # Update hour
+            orig_hour = self.clock_delta.seconds // 3600
+            orig_minute = (self.clock_delta.seconds - orig_hour * 3600) // 60
+            orig_secs = (self.clock_delta.seconds
+                    - (orig_hour * 3600)
+                    - (orig_minute * 60))
+            new_hour = datetime.now().hour - ((value >> 4) * 10 + (value & 0x0f))
+            self.clock_delta = timedelta(
+                days=self.clock_delta.days,
+                hours=new_hour,
+                minutes=orig_minute,
+                seconds=orig_secs,
+            )
+            return
+        elif port_addr == 0x13:
+            # Update minute
+            orig_hour = self.clock_delta.seconds // 3600
+            orig_minute = (self.clock_delta.seconds - orig_hour * 3600) // 60
+            orig_secs = (self.clock_delta.seconds
+                    - (orig_hour * 3600)
+                    - (orig_minute * 60))
+            new_minute = datetime.now().minute - ((value >> 4) * 10 + (value & 0x0f))
+            self.clock_delta = timedelta(
+                days=self.clock_delta.days,
+                hours=orig_hour,
+                minutes=new_minute,
+                seconds=orig_secs,
+            )
+            return
+        elif port_addr == 0x14:
+            # Update seconds
+            orig_hour = self.clock_delta.seconds // 3600
+            orig_minute = (self.clock_delta.seconds - orig_hour * 3600) // 60
+            orig_secs = (self.clock_delta.seconds
+                    - (orig_hour * 3600)
+                    - (orig_minute * 60))
+            new_secs = datetime.now().second - ((value >> 4) * 10 + (value & 0x0f))
+            self.clock_delta = timedelta(
+                days=self.clock_delta.days,
+                hours=orig_hour,
+                minutes=orig_minute,
+                seconds=new_secs,
+            )
             return
         elif port_addr == 0x20:
             # Bank select
