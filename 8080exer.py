@@ -73,4 +73,4 @@ if __name__ == '__main__':
     end_time = time.time()
     end_time_str = time.strftime('%H:%M:%S', time.localtime(end_time))
     elapsed_time = datetime.timedelta(seconds=(end_time - start_time))
-    print(f'\nFinished at {end_time_str} (elapsed time: {elapsed_time}).')
+    print(f'\n\nFinished at {end_time_str} (elapsed time: {elapsed_time}).')
