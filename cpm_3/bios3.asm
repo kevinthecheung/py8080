@@ -42,9 +42,9 @@ ddmabk	equ disk+6	;DMA bank port
 bdos	equ 5
 ;
 ;	jump vector for individual subroutines
-  if banked
+;
 	cseg
-  endif
+;
 	jmp	boot		;cold start
 wboote:	jmp	wboot		;warm start
 	jmp	conist		;console status
@@ -82,6 +82,9 @@ wboote:	jmp	wboot		;warm start
 	jmp	0
 ;
 ;	character device tables
+;
+	cseg
+;
 tblchr	db	'PYGAME'
 	db	mb$in$out
 	db	baud$none
@@ -91,6 +94,13 @@ tblchr	db	'PYGAME'
 	db	0
 ;
 ;	disk tables
+;
+	cseg
+;
+dpbstd	dpb	128,26,77,1024,64,2
+;
+	dseg
+;
 tbldrv	dw	dph0,dph1,dph2,dph3
 	dw	dph4,dph5,dph6,dph7
 	dw	dph8,dph9,dpha,dphb
@@ -113,16 +123,19 @@ dphd	dph	tbltrn,dpbstd
 dphe	dph	tbltrn,dpbstd
 dphf	dph	tbltrn,dpbstd
 ;
-dpbstd	dpb	128,26,77,1024,64,2
-;
 tbltrn	skew	26,6,1
 ;
 ;	fcb for ccp.com
+;
+	cseg
+;
 fcbccp	db	1,'CCP     ','COM',0,0,0,0
 	dw	0,0,0,0,0,0,0,0
 fcbnr	db	0,0,0
 ;
 ;	individual subroutines to perform each function
+;
+	dseg
 boot:
 	lxi	h,8000h		;assign console to PYGAME device
 	shld	@civec
@@ -135,8 +148,9 @@ boot:
 	shld	@aivec		;no aux device
 	shld	@aovec
 ;
-	; continue to wboot
+	jmp	wboot
 ;
+	cseg
 wboot:
   if banked
 	mvi	a,1
@@ -178,6 +192,8 @@ ldcpm:
 	jmp	0100h		;run the CCP
 ;
 ;	i/o handlers
+;
+	cseg
 ;
 conist:	;console input status
 	lhld	@civec
@@ -291,9 +307,7 @@ devini:
 ;
 ;	i/o drivers for the disk follow
 ;
-  if banked
 	dseg
-  endif
 ;
 home:	;move to the track 00 position of current drive
 ;	translate this call into a settrk call with parameter 00
@@ -405,11 +419,10 @@ flush:
 	xra	a
 	ret
 ;
-  if banked
-	cseg
-  endif
 ;
 ;	memory functions
+;
+	cseg
 move:
 	ldax	d
 	mov	m,a
@@ -437,6 +450,8 @@ xmove:
 	ret
 ;
 ;	clock function
+;
+	dseg
 time:
 	mov	a,c
 	ora	a	;set flags
@@ -479,9 +494,9 @@ getime:
 	ret
 ;
 ;	uninitialized memory
-  if banked
+;
 	cseg
-  endif
+;
 	ds	32
 bstack:
 ;
